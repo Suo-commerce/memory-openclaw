@@ -5,6 +5,8 @@ Offline-first persistent memory for OpenClaw agents. No API keys required.
 Your agent remembers across sessions, learns what matters, and works
 entirely on your machine.
 
+> **Get the memory server** — [orbitalfortress.com](https://orbitalfortress.com) · €19 one-time · macOS · Windows · Linux
+
 ---
 
 ## Quick Start
