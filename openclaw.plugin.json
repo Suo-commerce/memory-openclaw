@@ -1,0 +1,58 @@
+{
+  "id": "memory-astral-core",
+  "name": "Astral Core Memory",
+  "description": "Offline-first AI memory with surprise-gated learning. No API keys required. Three-tier memory lifecycle, local embeddings via llama.cpp, and optional fleet sync through Orbital Fortress.",
+  "version": "1.0.0",
+  "kind": "memory",
+  "entry": "./index.ts",
+  "skills": ["./skills"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "serverUrl": {
+        "type": "string",
+        "default": "http://localhost:8090",
+        "description": "Astral Core Memory API server URL"
+      },
+      "autoCapture": {
+        "type": "boolean",
+        "default": true,
+        "description": "Automatically capture memories from conversations. Memories pass through the surprise gate — only novel information is stored."
+      },
+      "autoRecall": {
+        "type": "boolean",
+        "default": true,
+        "description": "Automatically inject relevant memories into prompts before each agent turn."
+      },
+      "maxRecallMemories": {
+        "type": "number",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 20,
+        "description": "Maximum memories to inject per prompt. Higher values give more context but use more tokens."
+      },
+      "captureMinMessages": {
+        "type": "number",
+        "default": 2,
+        "minimum": 1,
+        "description": "Minimum messages in a turn before attempting capture. Prevents storing greetings."
+      },
+      "captureMaxChars": {
+        "type": "number",
+        "default": 8000,
+        "description": "Maximum characters per message to send for capture. Truncates very long responses."
+      },
+      "fortressUrl": {
+        "type": "string",
+        "default": "",
+        "description": "Orbital Fortress URL for cross-device fleet sync. Leave empty to disable. Example: https://94.237.39.28"
+      },
+      "healthCheckOnStart": {
+        "type": "boolean",
+        "default": true,
+        "description": "Check memory server health when plugin loads. Logs a warning if unreachable."
+      }
+    },
+    "additionalProperties": false
+  }
+}

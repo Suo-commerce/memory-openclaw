@@ -1,0 +1,85 @@
+{
+  "name": "@astralcore/memory-openclaw",
+  "version": "1.1.0",
+  "description": "The only OpenClaw memory plugin that works completely offline. Surprise-gated learning, local embeddings, fleet sync. No API keys required.",
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "memory",
+    "ai-memory",
+    "offline",
+    "local-first",
+    "privacy",
+    "persistent-memory",
+    "surprise-gated",
+    "astral-core",
+    "llm-memory",
+    "vector-search",
+    "fleet-sync"
+  ],
+  "homepage": "https://orbitalfortress.com",
+  "bugs": {
+    "url": "https://github.com/astralcore/memory-openclaw/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/astralcore/memory-openclaw.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Suocommerce",
+    "email": "dev@suocommerce.fi",
+    "url": "https://orbitalfortress.com"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+
+  "files": [
+    "dist/",
+    "openclaw.plugin.json",
+    "skills/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "clean": "rm -rf dist/",
+    "prebuild": "npm run clean",
+    "lint": "eslint src/ index.ts --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build && npm run test"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0",
+    "eslint": "^9.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "peerDependencies": {
+    "@openclaw/sdk": ">=0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@openclaw/sdk": {
+      "optional": false
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
