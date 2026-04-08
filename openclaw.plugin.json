@@ -1,8 +1,8 @@
 {
   "id": "memory-astral-core",
   "name": "Astral Core Memory",
-  "description": "Offline-first AI memory with surprise-gated learning. No API keys required. Three-tier memory lifecycle, local embeddings via llama.cpp, and optional fleet sync through Orbital Fortress.",
-  "version": "1.0.0",
+  "description": "Offline-first AI memory with surprise-gated learning, briefing cards, and importance scoring. No API keys required. Three-tier memory lifecycle, local embeddings via llama.cpp, and optional fleet sync through Orbital Fortress.",
+  "version": "2.0.0",
   "kind": "memory",
   "entry": "./index.ts",
   "skills": ["./skills"],
@@ -31,6 +31,13 @@
         "maximum": 20,
         "description": "Maximum memories to inject per prompt. Higher values give more context but use more tokens."
       },
+      "minSimilarity": {
+        "type": "number",
+        "default": 0.45,
+        "minimum": 0.0,
+        "maximum": 1.0,
+        "description": "Minimum cosine similarity threshold for memory recall (0.0-1.0). Default raised from 0.3 to 0.45 in v2.0.0 to reduce noisy dormant reactivation at scale."
+      },
       "captureMinMessages": {
         "type": "number",
         "default": 2,
@@ -42,10 +49,22 @@
         "default": 8000,
         "description": "Maximum characters per message to send for capture. Truncates very long responses."
       },
+      "briefingCardOnStart": {
+        "type": "boolean",
+        "default": true,
+        "description": "Inject a briefing card at the start of each session. The card is a ≤200 token summary of identity facts, active project context, and category health. Requires memory server v2.5.0+."
+      },
+      "briefingMaxTokens": {
+        "type": "number",
+        "default": 200,
+        "minimum": 50,
+        "maximum": 500,
+        "description": "Maximum tokens for the briefing card. Higher values give more context at session start."
+      },
       "fortressUrl": {
         "type": "string",
         "default": "",
-        "description": "Orbital Fortress URL for cross-device fleet sync. Leave empty to disable. Example: https://94.237.39.28"
+        "description": "Orbital Fortress URL for cross-device fleet sync. Leave empty to disable. Example: https://memory.orbitalfortress.com"
       },
       "healthCheckOnStart": {
         "type": "boolean",

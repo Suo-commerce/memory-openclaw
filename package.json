@@ -1,7 +1,7 @@
 {
   "name": "@astralcore/memory-openclaw",
-  "version": "1.1.0",
-  "description": "The only OpenClaw memory plugin that works completely offline. Surprise-gated learning, local embeddings, fleet sync. No API keys required.",
+  "version": "2.0.0",
+  "description": "The only OpenClaw memory plugin that works completely offline. Surprise-gated learning, briefing cards, importance scoring, local embeddings, fleet sync. No API keys required.",
   "keywords": [
     "openclaw",
     "openclaw-plugin",
@@ -15,7 +15,10 @@
     "astral-core",
     "llm-memory",
     "vector-search",
-    "fleet-sync"
+    "fleet-sync",
+    "briefing-card",
+    "importance-scoring",
+    "cognitive-shell"
   ],
   "homepage": "https://orbitalfortress.com",
   "bugs": {
