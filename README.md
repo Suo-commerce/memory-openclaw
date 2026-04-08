@@ -32,7 +32,7 @@ entirely on your machine.
 ### 1. Install the plugin
 
 ```bash
-npm install @astralcore/memory-openclaw
+npm install @suocommerce/memory-openclaw
 ```
 
 ### 2. Download and run the memory server
@@ -75,7 +75,7 @@ curl http://localhost:8090/health
 {
   "plugins": {
     "memory": {
-      "provider": "@astralcore/memory-openclaw",
+      "provider": "@suocommerce/memory-openclaw",
       "config": {
         "serverUrl": "http://localhost:8090",
         "autoCapture": true,

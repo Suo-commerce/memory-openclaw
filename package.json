@@ -1,5 +1,5 @@
 {
-  "name": "@astralcore/memory-openclaw",
+  "name": "@suocommerce/memory-openclaw",
   "version": "2.0.0",
   "description": "The only OpenClaw memory plugin that works completely offline. Surprise-gated learning, briefing cards, importance scoring, local embeddings, fleet sync. No API keys required.",
   "keywords": [
@@ -43,7 +43,6 @@
       "types": "./dist/index.d.ts"
     }
   },
-
   "files": [
     "dist/",
     "openclaw.plugin.json",
@@ -52,7 +51,6 @@
     "LICENSE",
     "CHANGELOG.md"
   ],
-
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "clean": "rm -rf dist/",
@@ -63,12 +61,11 @@
     "test:watch": "vitest",
     "prepublishOnly": "npm run build && npm run test"
   },
-  "dependencies": {},
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "vitest": "^1.6.0",
+    "@types/node": "^20.0.0",
     "eslint": "^9.0.0",
-    "@types/node": "^20.0.0"
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
   },
   "peerDependencies": {
     "@openclaw/sdk": ">=0.1.0"
