@@ -1,77 +1,119 @@
 {
+  "_generated": "2026-05-11T21:45:00Z",
+  "_comment": "Astral Core Memory plugin manifest for OpenClaw 2026.3.31+. Declares kind=memory at the manifest level (required for before_prompt_build dispatch) and mirrors the configSchema from index.ts in JSON Schema form so OpenClaw can validate user config in openclaw.json.",
   "id": "memory-astral-core",
-  "name": "Astral Core Memory",
-  "description": "Offline-first AI memory with surprise-gated learning, briefing cards, and importance scoring. No API keys required. Three-tier memory lifecycle, local embeddings via llama.cpp, and optional fleet sync through Orbital Fortress.",
-  "version": "2.0.0",
   "kind": "memory",
-  "entry": "./index.ts",
-  "skills": ["./skills"],
+  "uiHints": {
+    "serverUrl": {
+      "label": "Memory Server URL",
+      "placeholder": "http://localhost:8090",
+      "help": "URL of the Astral Core Memory API server. Default port 8090."
+    },
+    "autoCapture": {
+      "label": "Auto-Capture",
+      "help": "Automatically capture conversations through the surprise-gated MASK pipeline."
+    },
+    "autoRecall": {
+      "label": "Auto-Recall",
+      "help": "Automatically inject relevant memories into the agent's system prompt before each turn."
+    },
+    "maxRecallMemories": {
+      "label": "Max Recall Memories",
+      "help": "Maximum number of memories to inject per prompt (1-20).",
+      "placeholder": "5"
+    },
+    "minSimilarity": {
+      "label": "Minimum Similarity",
+      "help": "Minimum cosine similarity for memory recall (0.0-1.0). Raised from 0.3 to 0.45 in v2.0.0 to reduce noisy dormant reactivation.",
+      "placeholder": "0.45",
+      "advanced": true
+    },
+    "captureMinMessages": {
+      "label": "Capture Min Messages",
+      "help": "Minimum messages in a turn before attempting capture.",
+      "advanced": true
+    },
+    "captureMaxChars": {
+      "label": "Capture Max Chars",
+      "help": "Maximum characters to send for capture per turn.",
+      "placeholder": "8000",
+      "advanced": true
+    },
+    "briefingCardOnStart": {
+      "label": "Briefing Card on Session Start",
+      "help": "Inject a concise summary of identity facts and active context on the first turn of each session."
+    },
+    "briefingMaxTokens": {
+      "label": "Briefing Max Tokens",
+      "help": "Maximum tokens for the briefing card (50-500).",
+      "placeholder": "200",
+      "advanced": true
+    },
+    "fortressUrl": {
+      "label": "Orbital Fortress URL",
+      "placeholder": "https://memory.orbitalfortress.com",
+      "help": "Orbital Fortress URL for fleet sync. Leave empty to disable.",
+      "advanced": true
+    },
+    "healthCheckOnStart": {
+      "label": "Health Check on Start",
+      "help": "Check memory server health when the plugin loads.",
+      "advanced": true
+    },
+    "verboseHooks": {
+      "label": "Verbose Hooks (Diagnostic)",
+      "help": "Log every hook invocation at INFO level with dispatch context. Enable when diagnosing hook-routing issues. Adds approximately 5-8 log lines per agent turn. Safe to leave off in production.",
+      "advanced": true
+    }
+  },
   "configSchema": {
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "serverUrl": {
-        "type": "string",
-        "default": "http://localhost:8090",
-        "description": "Astral Core Memory API server URL"
+        "type": "string"
       },
       "autoCapture": {
-        "type": "boolean",
-        "default": true,
-        "description": "Automatically capture memories from conversations. Memories pass through the surprise gate — only novel information is stored."
+        "type": "boolean"
       },
       "autoRecall": {
-        "type": "boolean",
-        "default": true,
-        "description": "Automatically inject relevant memories into prompts before each agent turn."
+        "type": "boolean"
       },
       "maxRecallMemories": {
         "type": "number",
-        "default": 5,
         "minimum": 1,
-        "maximum": 20,
-        "description": "Maximum memories to inject per prompt. Higher values give more context but use more tokens."
+        "maximum": 20
       },
       "minSimilarity": {
         "type": "number",
-        "default": 0.45,
         "minimum": 0.0,
-        "maximum": 1.0,
-        "description": "Minimum cosine similarity threshold for memory recall (0.0-1.0). Default raised from 0.3 to 0.45 in v2.0.0 to reduce noisy dormant reactivation at scale."
+        "maximum": 1.0
       },
       "captureMinMessages": {
         "type": "number",
-        "default": 2,
-        "minimum": 1,
-        "description": "Minimum messages in a turn before attempting capture. Prevents storing greetings."
+        "minimum": 1
       },
       "captureMaxChars": {
         "type": "number",
-        "default": 8000,
-        "description": "Maximum characters per message to send for capture. Truncates very long responses."
+        "minimum": 100
       },
       "briefingCardOnStart": {
-        "type": "boolean",
-        "default": true,
-        "description": "Inject a briefing card at the start of each session. The card is a ≤200 token summary of identity facts, active project context, and category health. Requires memory server v2.5.0+."
+        "type": "boolean"
       },
       "briefingMaxTokens": {
         "type": "number",
-        "default": 200,
         "minimum": 50,
-        "maximum": 500,
-        "description": "Maximum tokens for the briefing card. Higher values give more context at session start."
+        "maximum": 500
       },
       "fortressUrl": {
-        "type": "string",
-        "default": "",
-        "description": "Orbital Fortress URL for cross-device fleet sync. Leave empty to disable. Example: https://memory.orbitalfortress.com"
+        "type": "string"
       },
       "healthCheckOnStart": {
-        "type": "boolean",
-        "default": true,
-        "description": "Check memory server health when plugin loads. Logs a warning if unreachable."
+        "type": "boolean"
+      },
+      "verboseHooks": {
+        "type": "boolean"
       }
-    },
-    "additionalProperties": false
+    }
   }
 }

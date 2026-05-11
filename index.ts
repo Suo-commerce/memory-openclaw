@@ -1,58 +1,88 @@
-// Generation Timestamp: 2026-04-08T19:00:00Z
-// Location: integrations/openclaw/index.ts
+// Generation Timestamp: 2026-05-11T22:15:00Z
+// Location: integrations/openclaw/index.ts (repo: Suo-commerce/memory-openclaw)
 //
 // Astral Core Memory — OpenClaw Plugin Entry Point
-// Version: 2.0.0
+// Version: 2.1.2
 //
-// This is the main entry point for the @astralcore/memory-openclaw plugin.
-// It registers lifecycle hooks (auto-recall, auto-capture, briefing card)
-// and agent tools with the OpenClaw Gateway.
+// This is the main entry point for the @suocommerce/memory-openclaw plugin.
+// It registers lifecycle hooks (auto-recall, auto-capture) and agent tools
+// with the OpenClaw Gateway.
 //
 // Architecture: Thin TypeScript bridge → Astral Core Memory Server (:8090)
-// The memory engine runs as a local server. This plugin handles OpenClaw
-// integration only.
+// Target: Rust server (astral-memory-server v2.7.0+). The Python
+// memory_api_server.py is no longer supported — pin v2.0.0 if you need it.
 //
-// Requires: OpenClaw >= 2026.3.22 (before_prompt_build hook support)
-// Requires: Astral Core Memory API Server v2.5.0+ for full feature set
-//           (degrades gracefully against older servers)
+// Requires: OpenClaw >= 2026.3.22 (before_prompt_build hook support,
+//           kind:"memory" manifest declaration)
+// Requires: Astral Core Memory API Server v2.7.0+ (Rust)
 //
 // Hook lifecycle:
 //   before_prompt_build → fetch relevant memories → inject into system prompt
 //   agent_end           → extract conversation → feed to surprise-gated pipeline
-//   session_start       → fetch briefing card → inject session context [NEW]
 //
 // Compatible with: plugins.slots.memory = "memory-astral-core"
 //
-// Changelog v2.0.0 (2026-04-08, B2 feature release):
-//   - Feature: Briefing card injection on session start via GET /v1/memory/briefing.
-//     The briefing card is a ≤200 token summary of identity facts, active context,
-//     and category health — injected at the top of every new session.
-//     (SPEC-PALACE-FOUNDATIONS-001 §1, task PF-1e)
-//   - Feature: astral_briefing tool — agent can manually request a fresh briefing
-//     card mid-session (e.g. "what do you know about me?").
-//   - Feature: astral_enrich tool — surfaces enrichment hints from the Cognitive
-//     Shell. Memories flagged for enrichment get presented as questions the agent
-//     can ask the user for clarification. (B2 Phase 4 enrichment system)
-//   - Fix: min_similarity raised from 0.3 → 0.45 on recall and auto-recall.
-//     Addresses dormant reactivation storm (reviewer feedback: 84% dormancy at 7k
-//     memories, 7-12 reactivations per search at min_similarity 0.3).
-//   - Feature: astral_stats now surfaces importance_scoring section from B2 RT-3.
-//   - Feature: Health check now reports active_in_ram vs dormant_cold_storage
-//     (RAM-OPT-001 dormant cold storage split).
-//   - Feature: configurable minSimilarity in plugin config (default 0.45).
-//   - Feature: consolidate() response includes importance_protected count.
+// ============================================================================
+// Changelog v2.1.2 (2026-05-11, Rust-native rewrite)
+// ============================================================================
 //
-// Changelog v1.1.0 (2026-04-01, tested on OpenClaw 2026.3.31):
-//   - Fix: capture uses /v1/memory/ingest/batch (multi-turn endpoint),
-//     not /v1/memory/ingest (single-turn). Fixes 400 errors on auto-capture.
-//   - Fix: OpenClaw sends message.content as array of content blocks
-//     (e.g. [{type:"text", text:"..."}]), not plain strings. Both hooks
-//     and the store tool now flatten content before sending to the API.
-//   - Fix: removed api.registerCommand() — not available on all OpenClaw
-//     builds. Caused "Cannot read properties of undefined (reading 'trim')"
-//     crash during plugin registration.
-//   - Fix: augmented-prompt messages are flattened to plain strings before
-//     sending, fixing "'list' object has no attribute 'strip'" server warning.
+// BREAKING CHANGE: this version is Rust-only. The Python memory_api_server.py
+// contract is no longer supported — pin v2.0.0 if you need it.
+//
+// CONTEXT: in May 2026, an end-to-end OpenClaw test against the running
+// Rust server revealed that the plugin and server had drifted in two minor
+// versions. The plugin assumed Python field names and Python-only endpoints
+// that the Rust server doesn't implement. All hook calls succeeded but
+// produced silent zeroes because response parsing failed.
+//
+// FIXES:
+//   - CRITICAL: api.config → api.pluginConfig. OpenClaw exposes plugin
+//     config under api.pluginConfig (matching the stock memory-lancedb
+//     plugin pattern). The previous spread of api.config ?? {} silently
+//     dropped every user-configured value back to the schema default.
+//     This single bug masked every other user setting since v2.0.0.
+//
+//   - Response field mapping aligned to Rust server:
+//       /v1/memory/augmented-prompt:
+//         memories_injected → memories_used
+//       /v1/memory/ingest, /v1/memory/ingest/batch:
+//         stored             → segments_stored
+//         skipped            → computed as segments_processed - segments_stored
+//       /v1/memory/stats:
+//         data.*             → data.stats.* (Rust wraps under "stats")
+//
+//   - Removed unsupported features (Rust server does not implement these
+//     endpoints):
+//       • Briefing card injection in before_prompt_build
+//       • astral_briefing tool
+//       • astral_forget tool (DELETE /v1/memory/source/<src> → 404)
+//       • astral_sync tool (POST /v1/sync/trigger → 404)
+//       • astral_enrich tool (depends on stats.enrichment which Rust omits)
+//     When the Rust server gains these endpoints, the tools return in v2.2.0.
+//
+//   - Removed config options:
+//       briefingCardOnStart, briefingMaxTokens, fortressUrl
+//
+//   - Auto-capture log line corrected: previously reported "all N filtered
+//     by surprise gate" when in fact N=0 segments-stored could mean either
+//     "none novel" or "all stored". Now distinguishes:
+//       segments_processed=N, segments_stored=N: "Captured N memories"
+//       segments_processed=N, segments_stored=0: "all N filtered by surprise gate"
+//       segments_processed=N, segments_stored=K (0<K<N): mixed result
+//
+//   - Health check no longer mentions embedding_backend or cognitive_shell.
+//     The Rust server doesn't return these fields in /health and the
+//     plugin shouldn't claim to know what it can't see.
+//
+// PRESERVED from v2.1.1:
+//   - verboseHooks config flag — entry/branch logging for hook diagnostics
+//   - kind: "memory" in openclaw.plugin.json manifest (required for dispatch)
+//   - configSchema in both manifest and definePluginEntry()
+//   - flattenContent() helper for OpenClaw array-shaped message content
+//   - Surprise-gated capture pipeline integration
+//
+// PROVEN ON: OpenClaw 2026.3.31, Rust server v2.7.0 (./target/debug/
+//            astral-memory-server --port 8090 --deep-rerank)
 
 import { Type, type Static } from "@sinclair/typebox";
 import {
@@ -88,7 +118,7 @@ function flattenContent(content: unknown): string {
 const AstralCoreConfigSchema = Type.Object({
   serverUrl: Type.String({
     default: "http://localhost:8090",
-    description: "Astral Core Memory API server URL",
+    description: "Astral Core Memory API server URL (Rust v2.7.0+)",
   }),
   autoCapture: Type.Boolean({
     default: true,
@@ -121,35 +151,23 @@ const AstralCoreConfigSchema = Type.Object({
     default: 8000,
     description: "Maximum characters to send for capture per turn",
   }),
-  briefingCardOnStart: Type.Boolean({
-    default: true,
-    description:
-      "Inject a briefing card at the start of each session. " +
-      "The card is a ≤200 token summary of identity facts and active context.",
-  }),
-  briefingMaxTokens: Type.Number({
-    default: 200,
-    description: "Maximum tokens for the briefing card (50-500)",
-    minimum: 50,
-    maximum: 500,
-  }),
-  fortressUrl: Type.Optional(
-    Type.String({
-      default: "",
-      description:
-        "Orbital Fortress URL for fleet sync (leave empty to disable)",
-    })
-  ),
   healthCheckOnStart: Type.Boolean({
     default: true,
     description: "Check memory server health when plugin loads",
+  }),
+  verboseHooks: Type.Boolean({
+    default: false,
+    description:
+      "Log every hook invocation at INFO level with dispatch context. " +
+      "Enable when diagnosing hook-routing issues. Adds approximately " +
+      "5-8 log lines per agent turn. Safe to leave off in production.",
   }),
 });
 
 type AstralCoreConfig = Static<typeof AstralCoreConfigSchema>;
 
 // ============================================================================
-// HTTP Client — talks to Astral Core Memory Server
+// HTTP Client — talks to Astral Core Memory Server (Rust v2.7.0+)
 // ============================================================================
 
 class AstralCoreClient {
@@ -169,9 +187,7 @@ class AstralCoreClient {
     totalMemories?: number;
     activeInRam?: number;
     dormantColdStorage?: number;
-    embeddingBackend?: string;
-    cognitiveShell?: boolean;
-    licenseTier?: string;
+    uptimeSeconds?: number;
   }> {
     try {
       const resp = await fetch(`${this.baseUrl}/health`, {
@@ -187,9 +203,7 @@ class AstralCoreClient {
         totalMemories: data.total_memories,
         activeInRam: data.active_in_ram,
         dormantColdStorage: data.dormant_cold_storage,
-        embeddingBackend: data.embedding_backend,
-        cognitiveShell: data.cognitive_shell,
-        licenseTier: data.license_tier,
+        uptimeSeconds: data.uptime_seconds,
       };
     } catch {
       this.healthy = false;
@@ -199,33 +213,6 @@ class AstralCoreClient {
 
   get isHealthy(): boolean {
     return this.healthy;
-  }
-
-  // --- Briefing Card (v2.5.0+) ---------------------------------------------
-
-  async getBriefingCard(
-    maxTokens: number = 200
-  ): Promise<{
-    card: string;
-    approxTokens: number;
-    totalMemories: number;
-  } | null> {
-    try {
-      const resp = await fetch(
-        `${this.baseUrl}/v1/memory/briefing?max_tokens=${maxTokens}`,
-        { signal: AbortSignal.timeout(10000) }
-      );
-      if (!resp.ok) return null; // Server too old or endpoint not available
-      const data = await resp.json();
-      if (data.error) return null;
-      return {
-        card: data.card ?? "",
-        approxTokens: data.approx_tokens ?? 0,
-        totalMemories: data.total_memories ?? 0,
-      };
-    } catch {
-      return null; // Graceful degradation — briefing is nice-to-have
-    }
   }
 
   // --- Memory Recall (search) -----------------------------------------------
@@ -246,8 +233,6 @@ class AstralCoreClient {
       surprise_score: number;
       utility_score: number;
       access_count: number;
-      importance_score?: number;
-      needs_enrichment?: boolean;
     }>;
     count: number;
     totalMemories: number;
@@ -275,6 +260,7 @@ class AstralCoreClient {
   }
 
   // --- Augmented Prompt (auto-recall context block) -------------------------
+  // Rust server returns: {context_block, memories_used, query_used}
 
   async getAugmentedPrompt(
     query: string,
@@ -282,7 +268,6 @@ class AstralCoreClient {
     maxMemories: number = 5,
     minSimilarity: number = 0.45
   ): Promise<{ contextBlock: string; memoriesInjected: number }> {
-    // Flatten message content to plain strings for the Python server
     const flatMessages = messages.map((m) => ({
       role: m.role,
       content: flattenContent(m.content),
@@ -306,11 +291,13 @@ class AstralCoreClient {
     const data = await resp.json();
     return {
       contextBlock: data.context_block ?? "",
-      memoriesInjected: data.memories_injected ?? 0,
+      memoriesInjected: data.memories_used ?? 0,
     };
   }
 
   // --- Memory Capture (ingest/batch) ----------------------------------------
+  // Rust server returns: {turns_received, segments_processed, segments_stored,
+  //                      memories_before, memories_after, session_id}
 
   async capture(
     turns: Array<{
@@ -318,8 +305,13 @@ class AstralCoreClient {
       assistant_response: string;
     }>,
     source: string
-  ): Promise<{ stored: number; skipped: number }> {
-    // Uses /ingest/batch (multi-turn endpoint), not /ingest (single-turn)
+  ): Promise<{
+    stored: number;
+    skipped: number;
+    processed: number;
+    memoriesBefore: number;
+    memoriesAfter: number;
+  }> {
     const resp = await fetch(`${this.baseUrl}/v1/memory/ingest/batch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -328,20 +320,25 @@ class AstralCoreClient {
     });
     if (!resp.ok) throw new Error(`Capture failed: ${resp.status}`);
     const data = await resp.json();
+    const processed = data.segments_processed ?? 0;
+    const stored = data.segments_stored ?? 0;
     return {
-      stored: data.stored ?? 0,
-      skipped: data.skipped ?? 0,
+      stored,
+      skipped: Math.max(0, processed - stored),
+      processed,
+      memoriesBefore: data.memories_before ?? 0,
+      memoriesAfter: data.memories_after ?? 0,
     };
   }
 
-  // --- Manual Store ---------------------------------------------------------
+  // --- Manual Store (single-turn ingest) ------------------------------------
+  // Same response shape as /ingest/batch but for a single turn.
 
   async store(
     text: string,
     category: string = "fact",
     source: string = "openclaw_manual"
-  ): Promise<{ stored: number }> {
-    // Single-turn ingest for explicit user-requested storage
+  ): Promise<{ stored: number; processed: number }> {
     const resp = await fetch(`${this.baseUrl}/v1/memory/ingest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -354,42 +351,47 @@ class AstralCoreClient {
     });
     if (!resp.ok) throw new Error(`Store failed: ${resp.status}`);
     const data = await resp.json();
-    return { stored: data.stored ?? 0 };
-  }
-
-  // --- Forget (delete by source) --------------------------------------------
-
-  async forget(source: string): Promise<{ deleted: number }> {
-    const resp = await fetch(
-      `${this.baseUrl}/v1/memory/source/${encodeURIComponent(source)}`,
-      {
-        method: "DELETE",
-        signal: AbortSignal.timeout(10000),
-      }
-    );
-    if (!resp.ok) throw new Error(`Forget failed: ${resp.status}`);
-    const data = await resp.json();
-    return { deleted: data.deleted ?? 0 };
+    return {
+      stored: data.segments_stored ?? 0,
+      processed: data.segments_processed ?? 0,
+    };
   }
 
   // --- Stats ----------------------------------------------------------------
+  // Rust server returns: {stats: {...}, server_version, ingest_count,
+  //                      uptime_seconds}
 
-  async stats(): Promise<Record<string, unknown>> {
+  async stats(): Promise<{
+    serverVersion: string;
+    ingestCount: number;
+    uptimeSeconds: number;
+    stats: Record<string, unknown>;
+  }> {
     const resp = await fetch(`${this.baseUrl}/v1/memory/stats`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!resp.ok) throw new Error(`Stats failed: ${resp.status}`);
-    return resp.json();
+    const data = await resp.json();
+    return {
+      serverVersion: data.server_version ?? "unknown",
+      ingestCount: data.ingest_count ?? 0,
+      uptimeSeconds: data.uptime_seconds ?? 0,
+      stats: data.stats ?? {},
+    };
   }
 
   // --- Consolidate ----------------------------------------------------------
+  // Rust server returns: {level, transitions: {evaluated, transitioned,
+  //                      promoted, demoted, dormant, pruned, errors}}
 
-  async consolidate(
-    level: string = "session"
-  ): Promise<{
+  async consolidate(level: string = "session"): Promise<{
+    evaluated: number;
+    transitioned: number;
     promoted: number;
-    archived: number;
-    importance_protected: number;
+    demoted: number;
+    dormant: number;
+    pruned: number;
+    errors: number;
   }> {
     const resp = await fetch(`${this.baseUrl}/v1/memory/consolidate`, {
       method: "POST",
@@ -399,36 +401,15 @@ class AstralCoreClient {
     });
     if (!resp.ok) throw new Error(`Consolidate failed: ${resp.status}`);
     const data = await resp.json();
+    const t = data.transitions ?? {};
     return {
-      promoted: data.promoted ?? 0,
-      archived: data.archived ?? 0,
-      importance_protected: data.importance_protected ?? 0,
-    };
-  }
-
-  // --- Sync to Orbital Fortress ---------------------------------------------
-
-  async sync(
-    fortressUrl: string,
-    maxBriefings: number = 10
-  ): Promise<{
-    recordsUploaded: number;
-    briefingsReceived: number;
-  }> {
-    const resp = await fetch(`${this.baseUrl}/v1/sync/trigger`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fortress_url: fortressUrl,
-        max_briefing_records: maxBriefings,
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!resp.ok) throw new Error(`Sync failed: ${resp.status}`);
-    const data = await resp.json();
-    return {
-      recordsUploaded: data.records_uploaded ?? 0,
-      briefingsReceived: data.briefings_received ?? 0,
+      evaluated: t.evaluated ?? 0,
+      transitioned: t.transitioned ?? 0,
+      promoted: t.promoted ?? 0,
+      demoted: t.demoted ?? 0,
+      dormant: t.dormant ?? 0,
+      pruned: t.pruned ?? 0,
+      errors: t.errors ?? 0,
     };
   }
 }
@@ -440,9 +421,16 @@ class AstralCoreClient {
 export default definePluginEntry({
   id: "memory-astral-core",
   name: "Astral Core Memory",
+  kind: "memory",
+  configSchema: AstralCoreConfigSchema,
 
   register(api: OpenClawPluginApi) {
     // --- Parse config -------------------------------------------------------
+    // CRITICAL: read from api.pluginConfig, NOT api.config.
+    // The stock memory-lancedb plugin uses api.pluginConfig — the same key
+    // OpenClaw exposes user config under. Spreading api.config ?? {} silently
+    // dropped every user setting back to the schema default (the bug that
+    // hid all of v2.0.0 through v2.1.1).
     const cfg: AstralCoreConfig = {
       serverUrl: "http://localhost:8090",
       autoCapture: true,
@@ -451,19 +439,18 @@ export default definePluginEntry({
       minSimilarity: 0.45,
       captureMinMessages: 2,
       captureMaxChars: 8000,
-      briefingCardOnStart: true,
-      briefingMaxTokens: 200,
-      fortressUrl: "",
       healthCheckOnStart: true,
-      ...(api.config ?? {}),
+      verboseHooks: false,
+      ...(api.pluginConfig ?? {}),
     };
 
     const client = new AstralCoreClient(cfg.serverUrl);
 
     api.logger.info(
-      `[astral-core] Initialising v2.0.0 — server: ${cfg.serverUrl}, ` +
+      `[astral-core] Initialising v2.1.2 — server: ${cfg.serverUrl}, ` +
         `autoRecall: ${cfg.autoRecall}, autoCapture: ${cfg.autoCapture}, ` +
-        `briefingCard: ${cfg.briefingCardOnStart}, minSim: ${cfg.minSimilarity}`
+        `minSim: ${cfg.minSimilarity}, ` +
+        `verboseHooks: ${cfg.verboseHooks}`
     );
 
     // --- Startup health check -----------------------------------------------
@@ -473,129 +460,114 @@ export default definePluginEntry({
           api.logger.info(
             `[astral-core] Memory server online — v${h.version}, ` +
               `${h.activeInRam ?? h.totalMemories} active` +
-              (h.dormantColdStorage ? ` + ${h.dormantColdStorage} dormant` : "") +
-              `, backend: ${h.embeddingBackend}` +
-              `, cognitive_shell: ${h.cognitiveShell}` +
-              (h.licenseTier ? `, license: ${h.licenseTier}` : "")
+              (h.dormantColdStorage
+                ? ` + ${h.dormantColdStorage} dormant`
+                : "") +
+              (h.uptimeSeconds
+                ? `, uptime ${Math.round(h.uptimeSeconds / 60)}min`
+                : "")
           );
         } else {
           api.logger.warn(
             `[astral-core] Memory server not reachable at ${cfg.serverUrl}. ` +
-              `Start it with: ./astral-memory-server`
+              `Start it with: ./astral-memory-server --port 8090`
           );
         }
       });
     }
 
     // ========================================================================
-    // HOOK: session_start — Briefing Card Injection
-    // ========================================================================
-    // Fires at the start of a new session (or conversation).
-    // Fetches a ≤200 token briefing card summarising the user's identity facts,
-    // active context, and category health. Injected into the system prompt so
-    // the agent begins every session with awareness of who it's talking to.
-    //
-    // SPEC: SPEC-PALACE-FOUNDATIONS-001 §1.3, task PF-1e
-    // Endpoint: GET /v1/memory/briefing?max_tokens=200
-    // Degrades gracefully: if the server is too old (< v2.5.0) or down,
-    // the hook returns nothing and the session starts without a card.
-
-    if (cfg.briefingCardOnStart) {
-      api.on(
-        "before_prompt_build",
-        async (event: {
-          messages?: Array<{ role: string; content: unknown }>;
-          isNewSession?: boolean;
-        }) => {
-          // Only inject the briefing card at the start of a session
-          // (first message, or when OpenClaw signals a new session)
-          const messages = event.messages ?? [];
-          const userMessages = messages.filter((m) => m.role === "user");
-
-          // Inject card on first user message only (session start)
-          if (userMessages.length > 1) return;
-
-          if (!client.isHealthy) {
-            await client.checkHealth();
-            if (!client.isHealthy) return;
-          }
-
-          try {
-            const briefing = await client.getBriefingCard(cfg.briefingMaxTokens);
-            if (briefing && briefing.card) {
-              return {
-                systemPromptParts: [
-                  {
-                    text: briefing.card,
-                    position: "before",
-                    label: "astral-core-briefing-card",
-                  },
-                ],
-              };
-            }
-          } catch (err) {
-            api.logger.debug(
-              `[astral-core] Briefing card fetch failed (non-fatal): ${
-                err instanceof Error ? err.message : String(err)
-              }`
-            );
-          }
-        },
-        { name: "astral-core-briefing-card", priority: 5 }
-      );
-    }
-
-    // ========================================================================
     // HOOK: before_prompt_build — Auto-Recall
     // ========================================================================
-    // Fires before the agent's system prompt is assembled.
-    // We fetch relevant memories and inject them as a context block.
+    // Fires before the agent's system prompt is assembled. We fetch relevant
+    // memories from the Rust server and inject them as a context block.
 
     if (cfg.autoRecall) {
       api.on(
         "before_prompt_build",
-        async (event: { messages?: Array<{ role: string; content: unknown }> }) => {
+        async (event: {
+          messages?: Array<{ role: string; content: unknown }>;
+        }) => {
+          if (cfg.verboseHooks) {
+            api.logger.info(
+              `[astral-core] before_prompt_build invoked — ` +
+                `messages=${event.messages?.length ?? 0}`
+            );
+          }
+
           if (!client.isHealthy) {
-            // Attempt reconnect silently
             await client.checkHealth();
-            if (!client.isHealthy) return;
+            if (!client.isHealthy) {
+              if (cfg.verboseHooks) {
+                api.logger.info(
+                  "[astral-core] before_prompt_build: server unhealthy, skipping"
+                );
+              }
+              return;
+            }
           }
 
           try {
-            // Extract the latest user message as the recall query
             const messages = event.messages ?? [];
             const lastUser = [...messages]
               .reverse()
               .find((m) => m.role === "user");
 
-            if (!lastUser?.content) return;
+            if (!lastUser?.content) {
+              if (cfg.verboseHooks) {
+                api.logger.info(
+                  "[astral-core] before_prompt_build: no user message, skipping"
+                );
+              }
+              return;
+            }
 
             const query = flattenContent(lastUser.content);
-            if (!query) return;
+            if (!query) {
+              if (cfg.verboseHooks) {
+                api.logger.info(
+                  "[astral-core] before_prompt_build: empty query, skipping"
+                );
+              }
+              return;
+            }
 
             const { contextBlock, memoriesInjected } =
               await client.getAugmentedPrompt(
                 query,
-                messages.slice(-10), // Last 10 messages for context
+                messages.slice(-10),
                 cfg.maxRecallMemories,
                 cfg.minSimilarity
               );
 
             if (contextBlock && memoriesInjected > 0) {
-              // Inject memories into the system prompt via the hook return
+              if (cfg.verboseHooks) {
+                api.logger.info(
+                  `[astral-core] Auto-recall injected — ${memoriesInjected} ` +
+                    `memories (query length: ${query.length} chars)`
+                );
+              }
               return {
                 systemPromptParts: [
                   {
                     text: contextBlock,
-                    position: "before", // Inject before other system prompt parts
+                    position: "before",
                     label: "astral-core-memories",
                   },
                 ],
               };
             }
+            if (cfg.verboseHooks) {
+              api.logger.info(
+                `[astral-core] Auto-recall: no memories above similarity ` +
+                  `threshold ${cfg.minSimilarity} (query: ${query.length} chars)`
+              );
+            }
           } catch (err) {
             api.logger.warn(
-              `[astral-core] Auto-recall failed: ${err instanceof Error ? err.message : String(err)}`
+              `[astral-core] Auto-recall failed: ${
+                err instanceof Error ? err.message : String(err)
+              }`
             );
           }
         },
@@ -606,8 +578,8 @@ export default definePluginEntry({
     // ========================================================================
     // HOOK: agent_end — Auto-Capture
     // ========================================================================
-    // Fires after the agent finishes a response.
-    // We send the conversation turn through the surprise-gated pipeline.
+    // Fires after the agent finishes a response. Send the conversation turn
+    // through the Rust server's surprise-gated MASK pipeline.
 
     if (cfg.autoCapture) {
       api.on(
@@ -617,11 +589,35 @@ export default definePluginEntry({
           sessionId?: string;
           agentId?: string;
         }) => {
-          if (!client.isHealthy) return;
+          if (cfg.verboseHooks) {
+            api.logger.info(
+              `[astral-core] agent_end invoked — ` +
+                `messages=${event.messages?.length ?? 0}, ` +
+                `session=${event.sessionId ?? "?"}, ` +
+                `agent=${event.agentId ?? "?"}`
+            );
+          }
+
+          if (!client.isHealthy) {
+            if (cfg.verboseHooks) {
+              api.logger.info(
+                "[astral-core] agent_end: server unhealthy, skipping capture"
+              );
+            }
+            return;
+          }
 
           try {
             const messages = event.messages ?? [];
-            if (messages.length < cfg.captureMinMessages) return;
+            if (messages.length < cfg.captureMinMessages) {
+              if (cfg.verboseHooks) {
+                api.logger.info(
+                  `[astral-core] agent_end: only ${messages.length} messages ` +
+                    `(< ${cfg.captureMinMessages}), skipping`
+                );
+              }
+              return;
+            }
 
             // Extract the last user+assistant pair(s)
             const turns: Array<{
@@ -648,25 +644,54 @@ export default definePluginEntry({
                   assistant_response: assistMsg,
                 });
                 i--; // Skip the user message we just consumed
-                // Capture at most 3 turns per hook invocation
                 if (turns.length >= 3) break;
               }
             }
 
-            if (turns.length === 0) return;
+            if (turns.length === 0) {
+              if (cfg.verboseHooks) {
+                api.logger.info(
+                  "[astral-core] agent_end: no user/assistant pairs found"
+                );
+              }
+              return;
+            }
 
-            const source = `openclaw_${event.agentId ?? "default"}_${event.sessionId ?? "session"}`;
+            const source = `openclaw_${event.agentId ?? "default"}_${
+              event.sessionId ?? "session"
+            }`;
 
-            const { stored, skipped } = await client.capture(turns, source);
+            const { stored, skipped, processed } = await client.capture(
+              turns,
+              source
+            );
 
-            if (stored > 0) {
+            // Three-way log message reflecting actual Rust server semantics:
+            //   - all stored      → "Captured N memories"
+            //   - all skipped     → "filtered by surprise gate (no novel)"
+            //   - partial         → "Captured K of N (M filtered)"
+            if (stored > 0 && skipped === 0) {
               api.logger.info(
-                `[astral-core] Captured ${stored} memories (${skipped} filtered by surprise gate)`
+                `[astral-core] Captured ${stored} memories`
+              );
+            } else if (stored === 0 && processed > 0) {
+              if (cfg.verboseHooks) {
+                api.logger.info(
+                  `[astral-core] agent_end: ${processed} segments processed, ` +
+                    `all filtered by surprise gate (no novel content)`
+                );
+              }
+            } else if (stored > 0 && skipped > 0) {
+              api.logger.info(
+                `[astral-core] Captured ${stored} of ${processed} memories ` +
+                  `(${skipped} filtered by surprise gate)`
               );
             }
           } catch (err) {
             api.logger.warn(
-              `[astral-core] Auto-capture failed: ${err instanceof Error ? err.message : String(err)}`
+              `[astral-core] Auto-capture failed: ${
+                err instanceof Error ? err.message : String(err)
+              }`
             );
           }
         },
@@ -677,14 +702,13 @@ export default definePluginEntry({
     // ========================================================================
     // TOOL: astral_recall — Semantic memory search
     // ========================================================================
-
     api.registerTool({
       name: "astral_recall",
       description:
-        "Search long-term memory for relevant information. Use this when you need to " +
-        "remember something from a previous conversation, recall user preferences, " +
-        "find project context, or look up facts the user has shared before. " +
-        "Returns semantically similar memories ranked by relevance.",
+        "Search long-term memory for relevant information. Use this when you " +
+        "need to remember something from a previous conversation, recall user " +
+        "preferences, find project context, or look up facts the user has " +
+        "shared before. Returns semantically similar memories ranked by relevance.",
       parameters: Type.Object({
         query: Type.String({
           description: "What to search for in memory",
@@ -697,7 +721,8 @@ export default definePluginEntry({
         ),
         source: Type.Optional(
           Type.String({
-            description: "Filter by source (e.g. 'openclaw_default_session')",
+            description:
+              "Filter by source (e.g. 'openclaw_main_session-uuid')",
           })
         ),
       }),
@@ -708,12 +733,15 @@ export default definePluginEntry({
           cfg.minSimilarity,
           params.source
         );
+
         const formatted = results
           .map(
             (r, i) =>
-              `[${i + 1}] (${(r.similarity * 100).toFixed(0)}% match, ${r.category}, ${r.speed}) ${r.text}`
+              `[${i + 1}] (${(r.similarity * 100).toFixed(0)}% match, ` +
+              `${r.category}, ${r.speed}) ${r.text}`
           )
           .join("\n");
+
         return {
           content: formatted || "No matching memories found.",
           metadata: { count, totalMemories },
@@ -724,15 +752,14 @@ export default definePluginEntry({
     // ========================================================================
     // TOOL: astral_store — Manually store a memory
     // ========================================================================
-
     api.registerTool({
       name: "astral_store",
       description:
-        "Explicitly store something important in long-term memory. Use this when " +
-        "the user asks you to remember something specific, or when you identify " +
-        "a critical fact, preference, or decision that should persist across sessions. " +
-        "The memory goes through surprise-gated filtering — truly redundant " +
-        "information may be automatically skipped.",
+        "Explicitly store something important in long-term memory. Use this " +
+        "when the user asks you to remember something specific, or when you " +
+        "identify a critical fact, preference, or decision that should " +
+        "persist across sessions. The memory goes through surprise-gated " +
+        "filtering — truly redundant information may be automatically skipped.",
       parameters: Type.Object({
         text: Type.String({
           description: "The information to remember",
@@ -740,86 +767,32 @@ export default definePluginEntry({
         category: Type.Optional(
           Type.String({
             description:
-              "Category: fact, preference, decision, entity, event, pattern (default: fact)",
+              "Category: fact, preference, decision, entity, event, pattern " +
+              "(default: fact)",
             default: "fact",
           })
         ),
       }),
       execute: async (params) => {
-        const { stored } = await client.store(
+        const { stored, processed } = await client.store(
           params.text,
           params.category ?? "fact",
           "openclaw_manual"
         );
-        return {
-          content:
-            stored > 0
-              ? `Stored in long-term memory: "${params.text.slice(0, 80)}${params.text.length > 80 ? "..." : ""}"`
-              : "Memory was filtered by surprise gate (likely already known). Not stored.",
-        };
-      },
-    });
-
-    // ========================================================================
-    // TOOL: astral_forget — Delete memories by source
-    // ========================================================================
-
-    api.registerTool({
-      name: "astral_forget",
-      description:
-        "Delete all memories from a specific source. Use when the user wants to " +
-        "clear memories from a particular session or context.",
-      parameters: Type.Object({
-        source: Type.String({
-          description:
-            "Source identifier to delete (e.g. 'openclaw_default_session')",
-        }),
-      }),
-      execute: async (params) => {
-        const { deleted } = await client.forget(params.source);
-        return {
-          content: `Deleted ${deleted} memories from source "${params.source}".`,
-        };
-      },
-    });
-
-    // ========================================================================
-    // TOOL: astral_briefing — Get briefing card on demand
-    // ========================================================================
-    // Lets the agent fetch a fresh briefing card mid-session.
-    // Useful when the user asks "what do you know about me?" or "summarise
-    // what you remember" — the card is a concise ≤200 token summary.
-
-    api.registerTool({
-      name: "astral_briefing",
-      description:
-        "Get a briefing card — a concise summary of what you know about the user. " +
-        "Includes identity facts, active project context, and memory health. " +
-        "Use when the user asks what you remember or for a summary of your knowledge. " +
-        "This is different from astral_recall which searches for specific topics.",
-      parameters: Type.Object({
-        max_tokens: Type.Optional(
-          Type.Number({
-            description: "Maximum tokens for the card (default: 200)",
-            default: 200,
-          })
-        ),
-      }),
-      execute: async (params) => {
-        const briefing = await client.getBriefingCard(params.max_tokens ?? 200);
-        if (!briefing || !briefing.card) {
+        if (stored > 0) {
+          return {
+            content: `Stored ${stored} segment(s) in long-term memory.`,
+          };
+        }
+        if (processed > 0) {
           return {
             content:
-              "Briefing card not available. The memory server may be too old " +
-              "(requires v2.5.0+) or no memories have been stored yet.",
+              "Memory was filtered by surprise gate (likely already known). " +
+              "Nothing stored.",
           };
         }
         return {
-          content: briefing.card,
-          metadata: {
-            approxTokens: briefing.approxTokens,
-            totalMemories: briefing.totalMemories,
-          },
+          content: "No content to store.",
         };
       },
     });
@@ -827,30 +800,30 @@ export default definePluginEntry({
     // ========================================================================
     // TOOL: astral_stats — Memory system statistics
     // ========================================================================
-
     api.registerTool({
       name: "astral_stats",
       description:
-        "Get memory system statistics including total memories, tier distribution, " +
-        "category health, importance scoring status, and embedding backend info. " +
-        "Useful for understanding the current state of the memory system.",
+        "Get memory system statistics including total memories, tier " +
+        "distribution, matrices state, and embedding dimensions. Useful " +
+        "for understanding the current state of the memory system.",
       parameters: Type.Object({}),
       execute: async () => {
         const health = await client.checkHealth();
-        const stats = await client.stats();
+        const { serverVersion, ingestCount, uptimeSeconds, stats } =
+          await client.stats();
         return {
           content: JSON.stringify(
             {
               server: {
                 online: health.ok,
-                version: health.version,
-                embeddingBackend: health.embeddingBackend,
-                cognitiveShell: health.cognitiveShell,
+                version: serverVersion,
+                uptimeSeconds,
+                ingestCount,
+                totalMemories: health.totalMemories,
                 activeInRam: health.activeInRam,
                 dormantColdStorage: health.dormantColdStorage,
-                licenseTier: health.licenseTier,
               },
-              ...stats,
+              stats,
             },
             null,
             2
@@ -860,93 +833,39 @@ export default definePluginEntry({
     });
 
     // ========================================================================
-    // TOOL: astral_enrich — Surface enrichment hints from Cognitive Shell
+    // TOOL: astral_consolidate — Trigger consolidation pass
     // ========================================================================
-    // The enrichment system flags memories where the surprise gate stored
-    // something that could benefit from user clarification. The agent can
-    // surface these hints as natural follow-up questions.
-    //
-    // Example: Memory stored "user prefers X framework" but confidence is low.
-    // Enrichment hint: "You mentioned X — did you mean the React framework
-    // or the testing framework?"
-    //
-    // Reads from /v1/memory/stats → enrichment section. If no enrichment
-    // data is available (pre-B2 server), degrades gracefully.
-
     api.registerTool({
-      name: "astral_enrich",
+      name: "astral_consolidate",
       description:
-        "Check for memories that need clarification from the user. The memory system " +
-        "may have stored ambiguous information that could benefit from follow-up " +
-        "questions. Use this occasionally (not every turn) to improve memory quality. " +
-        "Returns pending enrichment hints or 'none pending' if all clear.",
-      parameters: Type.Object({}),
-      execute: async () => {
-        try {
-          const stats = (await client.stats()) as Record<string, any>;
-          const enrichment = stats.enrichment;
-          if (!enrichment || enrichment.pending === 0) {
-            return {
-              content: "No enrichment hints pending. All memories are clear.",
-            };
-          }
-          return {
-            content:
-              `${enrichment.pending} memories could benefit from clarification. ` +
-              `${enrichment.asked} hints already asked, ${enrichment.resolved} resolved, ` +
-              `${enrichment.expired} expired. ` +
-              `Use astral_recall to find memories with ambiguous content and ask ` +
-              `the user for clarification.`,
-            metadata: enrichment,
-          };
-        } catch {
-          return {
-            content:
-              "Enrichment system not available (requires memory server with B2 features).",
-          };
-        }
+        "Trigger a memory consolidation pass. Evaluates all memories for " +
+        "tier transitions (promotion to faster tiers if frequently accessed, " +
+        "demotion or dormancy if rarely useful). Use sparingly — runs " +
+        "across the entire memory store.",
+      parameters: Type.Object({
+        level: Type.Optional(
+          Type.String({
+            description:
+              "Consolidation level: 'session' (default), 'daily', or 'deep'",
+            default: "session",
+          })
+        ),
+      }),
+      execute: async (params) => {
+        const result = await client.consolidate(params.level ?? "session");
+        return {
+          content:
+            `Consolidation complete. ` +
+            `Evaluated ${result.evaluated} memories. ` +
+            `Transitions: ${result.transitioned} ` +
+            `(${result.promoted} promoted, ${result.demoted} demoted, ` +
+            `${result.dormant} dormant, ${result.pruned} pruned). ` +
+            (result.errors > 0 ? `Errors: ${result.errors}.` : ""),
+          metadata: result,
+        };
       },
     });
 
-    // ========================================================================
-    // TOOL: astral_sync — Sync with Orbital Fortress
-    // ========================================================================
-
-    if (cfg.fortressUrl) {
-      api.registerTool({
-        name: "astral_sync",
-        description:
-          "Synchronise local memories with Orbital Fortress for cross-device " +
-          "fleet intelligence. Uploads novel memories and receives briefings " +
-          "from other devices in the fleet. Only available when Fortress URL " +
-          "is configured.",
-        parameters: Type.Object({
-          maxBriefings: Type.Optional(
-            Type.Number({
-              description: "Max briefing records to receive (default: 10)",
-              default: 10,
-            })
-          ),
-        }),
-        execute: async (params) => {
-          const { recordsUploaded, briefingsReceived } = await client.sync(
-            cfg.fortressUrl!,
-            params.maxBriefings ?? 10
-          );
-          return {
-            content:
-              `Fortress sync complete. ` +
-              `Uploaded: ${recordsUploaded} memories. ` +
-              `Received: ${briefingsReceived} briefings from fleet.`,
-          };
-        },
-      });
-    }
-
-    // NOTE: api.registerCommand() is not available on all OpenClaw builds.
-    // The /astral slash command is omitted to ensure universal compatibility.
-    // Users can check memory status via the astral_stats tool instead.
-
-    api.logger.info("[astral-core] Plugin v2.0.0 registered successfully");
+    api.logger.info("[astral-core] Plugin v2.1.2 registered successfully");
   },
 });

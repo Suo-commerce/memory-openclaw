@@ -1,6 +1,6 @@
 {
   "name": "@suocommerce/memory-openclaw",
-  "version": "2.1.2",
+  "version": "2.1.1",
   "description": "The only OpenClaw memory plugin that works completely offline. Surprise-gated learning, briefing cards, importance scoring, local embeddings, fleet sync. No API keys required.",
   "keywords": [
     "openclaw",
